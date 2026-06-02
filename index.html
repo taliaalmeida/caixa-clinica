@@ -709,26 +709,16 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 let db = null;
 let currentMesRef = null;
 
-function getConfig() {
-  try { return JSON.parse(localStorage.getItem('fb_config') || 'null'); } catch(e) { return null; }
-}
-function saveConfig() {
-  const apiKey = document.getElementById('cfg-apikey').value.trim();
-  const dbURL = document.getElementById('cfg-dburl').value.trim();
-  const projectId = document.getElementById('cfg-projectid').value.trim();
-  if (!apiKey || !dbURL || !projectId) {
-    document.getElementById('config-error').style.display = 'block';
-    return;
-  }
-  const cfg = { apiKey, databaseURL: dbURL, projectId, authDomain: projectId+'.firebaseapp.com', storageBucket: projectId+'.appspot.com' };
-  localStorage.setItem('fb_config', JSON.stringify(cfg));
-  document.getElementById('config-modal').classList.add('hidden');
-  initFirebase(cfg);
-}
-function reconfigura() {
-  localStorage.removeItem('fb_config');
-  document.getElementById('config-modal').classList.remove('hidden');
-}
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFiWIuWb8HBmRenqGmjvYyQiBWXuBYGOE",
+  databaseURL: "https://caixa-clinicasv-default-rtdb.firebaseio.com",
+  projectId: "caixa-clinicasv",
+  authDomain: "caixa-clinicasv.firebaseapp.com",
+  storageBucket: "caixa-clinicasv.appspot.com"
+};
+function getConfig() { return FIREBASE_CONFIG; }
+function saveConfig() {}
+function reconfigura() { toast('Configuração fixa no sistema.'); }
 function initFirebase(cfg) {
   try {
     if (!firebase.apps.length) firebase.initializeApp(cfg);
@@ -1038,11 +1028,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) el.value = dateToday;
   });
 
-  const cfg = getConfig();
-  if (cfg) {
-    document.getElementById('config-modal').classList.add('hidden');
-    initFirebase(cfg);
-  }
+  document.getElementById('config-modal').classList.add('hidden');
+  initFirebase(FIREBASE_CONFIG);
   // Hide loading
   setTimeout(() => {
     document.getElementById('loading-screen').classList.add('hidden');
