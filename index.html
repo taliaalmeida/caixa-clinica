@@ -1,20 +1,3 @@
-
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta 
-
-
-
-Computadores na nuvem
-Novo
-
-Manus is an AI Agent and can make mistakes. Please double-check before use.
-
-caixa_clinica_revisado.html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -496,7 +479,6 @@ function initFirebase(cfg) {
     else firebase.app();
     db = firebase.database();
     setSyncStatus(true);
-    // listeners serão inscritos/atualizados via selectedMonthKey
     subscribeAll();
   } catch(e) { setSyncStatus(false); toast('Erro Firebase: '+e.message,'error'); }
 }
@@ -515,8 +497,6 @@ function getMonthFolderName(monthKey) {
 }
 
 function mesRef(col, monthKey) {
-  // Tenta encontrar o dado no formato de nome (Maio) ou numérico (2026-05)
-  // Para ESCRITA, usaremos sempre o formato de nome (Maio) conforme solicitado
   const folderName = getMonthFolderName(monthKey);
   return db.ref('meses/' + folderName + '/' + col);
 }
@@ -529,26 +509,39 @@ function subscribeAll() {
 
   ['atendimentos','colaboradores','produtos','despesas'].forEach(col => {
     const folderName = getMonthFolderName(selectedMonthKey);
-    const numericKey = selectedMonthKey; // YYYY-MM
+    const numericKey = selectedMonthKey;
     
-    // Função para processar os dados recebidos
+    data[col] = {};
+
     const processData = (snap) => {
       const val = snap.val() || {};
-      // Mescla os dados se já houver algo (para suportar busca em dois caminhos)
-      Object.assign(data[col], val);
+      Object.entries(val).forEach(([id, item]) => {
+        const itemDate = item.data;
+        const itemTargetMonth = monthKeyFromDateStr(itemDate);
+        
+        // LÓGICA DE AUTO-MIGRAÇÃO:
+        // Se o item está nesta pasta mas a data dele pertence a outro mês, movemos ele.
+        if (itemTargetMonth && itemTargetMonth !== selectedMonthKey) {
+          console.log(`Migrando item ${id} de ${selectedMonthKey} para ${itemTargetMonth}`);
+          const dstRef = mesRef(col, itemTargetMonth);
+          dstRef.child(id).set(item).then(() => {
+            // Remove da pasta errada (tanto nome quanto numérico)
+            db.ref('meses/' + folderName + '/' + col).child(id).remove();
+            db.ref('meses/' + numericKey + '/' + col).child(id).remove();
+          });
+        } else {
+          // Se está no mês correto, adiciona aos dados locais para exibição
+          data[col][id] = item;
+        }
+      });
       render(col);
       renderFechamento();
     };
 
-    // Limpa os dados locais antes de buscar
-    data[col] = {};
-
-    // Busca no caminho por NOME (Maio, Junho...)
     const refNome = db.ref('meses/' + folderName + '/' + col);
     refNome.on('value', processData);
     firebaseUnsubs.push(() => refNome.off('value', processData));
 
-    // Busca no caminho NUMÉRICO (2026-05...) para compatibilidade com dados antigos
     const refNum = db.ref('meses/' + numericKey + '/' + col);
     refNum.on('value', processData);
     firebaseUnsubs.push(() => refNum.off('value', processData));
@@ -563,17 +556,14 @@ function itemMonthKey(col, item) {
 function pushItem(col,obj) {
   const id=uid(); obj.id=id;
   const mk = itemMonthKey(col,obj);
-  // Novos itens sempre salvos na pasta com NOME (Maio, Junho...)
   mesRef(col,mk).child(id).set(obj)
     .then(()=>toast('Salvo ✓','success'))
     .catch(e=>toast('Erro: '+e.message,'error'));
 }
 
 function deleteItem(col,id) {
-  // Tenta deletar nos dois caminhos possíveis
   const folderName = getMonthFolderName(selectedMonthKey);
   const numericKey = selectedMonthKey;
-  
   db.ref('meses/' + folderName + '/' + col).child(id).remove();
   db.ref('meses/' + numericKey + '/' + col).child(id).remove()
     .then(()=>toast('Removido ✓'))
@@ -583,21 +573,15 @@ function deleteItem(col,id) {
 function updateItem(col,id,obj) {
   const currentMonth = monthKeyFromDateStr(data[col] && data[col][id] && data[col][id].data) || selectedMonthKey;
   const targetMonth = monthKeyFromDateStr(obj && obj.data) || currentMonth;
-  
-  const srcRef = mesRef(col, currentMonth);
-  const dstRef = mesRef(col, targetMonth);
-
-  // Deleta o antigo (nos dois formatos) e salva o novo no formato NOME
   deleteItem(col, id);
   obj.id = id;
-  dstRef.child(id).set(obj)
+  mesRef(col, targetMonth).child(id).set(obj)
     .then(()=>toast('Atualizado ✓','success'))
     .catch(e=>toast('Erro: '+e.message,'error'));
 }
 
 // ─── MODAL DE EDIÇÃO ────────────────────────────
 let editState = { col: null, id: null };
-
 function openEdit(col, id) {
   const item = data[col][id];
   if (!item) return;
@@ -607,17 +591,14 @@ function openEdit(col, id) {
   document.getElementById('edit-modal-body').innerHTML = buildEditForm(col, item);
   document.getElementById('edit-modal').classList.remove('hidden');
 }
-
 function closeEdit() {
   document.getElementById('edit-modal').classList.add('hidden');
   editState = { col: null, id: null };
 }
-
 function buildEditForm(col, item) {
   const pgtoOpts = ['Dinheiro','Pix','Cartão débito','Cartão crédito','Transferência','Convênio','Boleto'];
   const pgtoSel = (val) => `<select id="e-pgto" style="font-family:var(--font-body);font-size:14px;padding:9px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--blush);color:var(--text-dark);outline:none;width:100%;appearance:none;">
     ${pgtoOpts.map(o=>`<option ${val===o?'selected':''}>${o}</option>`).join('')}</select>`;
-
   if (col === 'atendimentos') {
     const origemOpts = ['Instagram','Indicação','Google','Facebook','TikTok','Passou na rua','Outro'];
     return `<div class="form-grid">
@@ -666,13 +647,11 @@ function buildEditForm(col, item) {
   }
   return '';
 }
-
 function saveEdit() {
   const { col, id } = editState;
   if (!col || !id) return;
   let obj = {};
   const v = (selector) => { const el=document.getElementById(selector); return el?el.value.trim():undefined; };
-
   if (col === 'atendimentos') {
     obj = { data:v('e-data'), paciente:v('e-paciente'), proc:v('e-proc'), sessao:v('e-sessao'), valor:parseFloat(v('e-valor'))||0, pgto:v('e-pgto'), origem:v('e-origem'), obs:v('e-obs') };
     if (!obj.paciente || !obj.proc) { toast('Informe paciente e procedimento.','error'); return; }
@@ -726,8 +705,6 @@ function renderAtendimentos() {
     <td>${actionBtns('atendimentos',a.id)}</td>
   </tr>`).join('');
 }
-
-// ─── COLABORADORES ───────────────────────────────
 function addColaborador() {
   const obj = { data:document.getElementById('co-data').value||today(), nome:document.getElementById('co-nome').value.trim(), proc:document.getElementById('co-proc').value.trim(), valor:parseFloat(document.getElementById('co-valor').value)||0, pgto:document.getElementById('co-pgto').value, obs:document.getElementById('co-obs').value.trim() };
   if (!obj.nome) { toast('Informe o nome.','error'); return; }
@@ -746,8 +723,6 @@ function renderColaboradores() {
     <td>${actionBtns('colaboradores',c.id)}</td>
   </tr>`).join('');
 }
-
-// ─── PRODUTOS ────────────────────────────────────
 function addProduto() {
   const qtd=parseInt(document.getElementById('pr-qtd').value)||1;
   const vUnit=parseFloat(document.getElementById('pr-valor').value)||0;
@@ -769,8 +744,6 @@ function renderProdutos() {
     <td>${actionBtns('produtos',p.id)}</td>
   </tr>`).join('');
 }
-
-// ─── DESPESAS ────────────────────────────────────
 function addDespesa() {
   const obj = { data:document.getElementById('de-data').value||today(), desc:document.getElementById('de-desc').value.trim(), valor:parseFloat(document.getElementById('de-valor').value)||0, pgto:document.getElementById('de-pgto').value, obs:document.getElementById('de-obs').value.trim() };
   if (!obj.desc) { toast('Informe a descrição.','error'); return; }
@@ -789,7 +762,6 @@ function renderDespesas() {
     <td>${actionBtns('despesas',d.id)}</td>
   </tr>`).join('');
 }
-
 function render(col) {
   if (col==='atendimentos') renderAtendimentos();
   else if (col==='colaboradores') renderColaboradores();
@@ -827,7 +799,6 @@ function renderFechamento() {
     </tr>
   </tbody>`;
 }
-
 function exportarTXT() {
   const totalAt=sum(data.atendimentos,'valor'),totalCo=sum(data.colaboradores,'valor');
   const totalPr=sum(data.produtos,'valor'),totalDe=sum(data.despesas,'valor');
@@ -841,7 +812,6 @@ function exportarCSV() {
   const body=rows.map(a=>`${a.data},${a.paciente},${a.proc},${a.sessao||''},${a.valor},${a.pgto||''},${a.origem||''},${(a.obs||'').replace(/,/g,' ')}`).join('\n');
   const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(header+body); a.download=`atendimentos-${selectedMonthKey}.csv`; a.click();
 }
-
 function showTab(name,btn) {
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -849,14 +819,10 @@ function showTab(name,btn) {
   btn.classList.add('active');
   if (name==='fechamento') renderFechamento();
 }
-
 document.addEventListener('DOMContentLoaded',()=>{
   const selector=document.getElementById('month-selector');
-
-  // inicializa mês selecionado como "agora"
   const initialKey = mesKey();
   selectedMonthKey = initialKey;
-
   if (selector) {
     selector.value = initialKey;
     selector.addEventListener('change', (e) => {
@@ -864,7 +830,6 @@ document.addEventListener('DOMContentLoaded',()=>{
       updateMonthSelector();
     });
   }
-
   const lbl=mesLabelFromKey(selectedMonthKey);
   document.getElementById('mes-label').textContent=lbl;
   document.getElementById('mes-badge').textContent='🗓️ '+lbl.charAt(0).toUpperCase()+lbl.slice(1);
@@ -877,4 +842,3 @@ document.addEventListener('DOMContentLoaded',()=>{
 </script>
 </body>
 </html>
-Seletor de Mês no Header com Organização por Pastas - Manus
