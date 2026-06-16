@@ -246,6 +246,10 @@ tr:hover td { background: rgba(253,240,244,0.5); }
   </div>
   <div class="header-right">
     <div class="mes-badge" id="mes-badge">—</div>
+    <div class="field" style="min-width:160px;">
+      <label style="display:none;">Mês</label>
+      <input id="month-selector" type="month" style="width:160px;" />
+    </div>
     <div class="sync-dot">
       <div class="dot" id="sync-dot"></div>
       <span id="sync-label">Sincronizando...</span>
@@ -384,6 +388,15 @@ function today() { return new Date().toISOString().split('T')[0]; }
 function fmtDate(d) { return d ? d.split('-').reverse().join('/') : '—'; }
 function mesAtual() { return new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'}); }
 function mesKey() { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function mesKeyFromInput(v) { return v && /^\d{4}-\d{2}$/.test(v) ? v : mesKey(); }
+function mesLabelFromKey(key) {
+  const [y,m] = (key||'').split('-');
+  const date = new Date(Number(y), Number(m)-1, 1);
+  return date.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+}
+let selectedMonthKey = mesKey();
+let firebaseUnsubs = [];
+
 function toast(msg,type='') {
   const el=document.createElement('div'); el.className='toast '+type; el.textContent=msg;
   document.getElementById('toast-container').appendChild(el);
@@ -409,6 +422,7 @@ function initFirebase(cfg) {
     else firebase.app();
     db = firebase.database();
     setSyncStatus(true);
+    // listeners serão inscritos/atualizados via selectedMonthKey
     subscribeAll();
   } catch(e) { setSyncStatus(false); toast('Erro Firebase: '+e.message,'error'); }
 }
@@ -419,14 +433,23 @@ function setSyncStatus(online) {
 
 // ─── DATA ────────────────────────────────────────
 let data = { atendimentos:{}, colaboradores:{}, produtos:{}, despesas:{} };
-function mesRef(col) { return db.ref('meses/'+mesKey()+'/'+col); }
+function mesRef(col) { return db.ref('meses/'+selectedMonthKey+'/'+col); }
 function subscribeAll() {
+  // limpa listeners anteriores
+  if (firebaseUnsubs && firebaseUnsubs.length) {
+    firebaseUnsubs.forEach(u => { try { u(); } catch(e){} });
+  }
+  firebaseUnsubs = [];
+
   ['atendimentos','colaboradores','produtos','despesas'].forEach(col => {
-    mesRef(col).on('value', snap => {
+    const ref = mesRef(col);
+    const handler = (snap) => {
       data[col] = snap.val() || {};
       render(col);
       renderFechamento();
-    });
+    };
+    ref.on('value', handler);
+    firebaseUnsubs.push(() => ref.off('value', handler));
   });
 }
 function pushItem(col,obj) {
@@ -683,14 +706,14 @@ function exportarTXT() {
   const totalAt=sum(data.atendimentos,'valor'),totalCo=sum(data.colaboradores,'valor');
   const totalPr=sum(data.produtos,'valor'),totalDe=sum(data.despesas,'valor');
   const saldo=totalAt+totalCo+totalPr-totalDe;
-  const txt=`FECHAMENTO DE CAIXA — ${mesAtual().toUpperCase()}\n${'═'.repeat(44)}\nAtendimentos da clínica: ${count(data.atendimentos)} — ${fmt(totalAt)}\nAtendimentos colaboradores: ${count(data.colaboradores)} — ${fmt(totalCo)}\nProdutos vendidos: ${count(data.produtos)} — ${fmt(totalPr)}\n${'─'.repeat(44)}\nTotal que entrou: ${fmt(totalAt+totalCo+totalPr)}\nTotal despesas:  – ${fmt(totalDe)}\n${'═'.repeat(44)}\nSALDO FINAL: ${fmt(saldo)}\n\nGerado em: ${new Date().toLocaleString('pt-BR')}`;
-  const a=document.createElement('a'); a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(txt); a.download=`fechamento-${mesKey()}.txt`; a.click();
+  const txt=`FECHAMENTO DE CAIXA — ${mesLabelFromKey(selectedMonthKey).toUpperCase()}\n${'═'.repeat(44)}\nAtendimentos da clínica: ${count(data.atendimentos)} — ${fmt(totalAt)}\nAtendimentos colaboradores: ${count(data.colaboradores)} — ${fmt(totalCo)}\nProdutos vendidos: ${count(data.produtos)} — ${fmt(totalPr)}\n${'─'.repeat(44)}\nTotal que entrou: ${fmt(totalAt+totalCo+totalPr)}\nTotal despesas:  – ${fmt(totalDe)}\n${'═'.repeat(44)}\nSALDO FINAL: ${fmt(saldo)}\n\nGerado em: ${new Date().toLocaleString('pt-BR')}`;
+  const a=document.createElement('a'); a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(txt); a.download=`fechamento-${selectedMonthKey}.txt`; a.click();
 }
 function exportarCSV() {
   const rows=Object.values(data.atendimentos);
   const header='Data,Paciente,Procedimento,Sessão,Valor,Pagamento,Origem,Observação\n';
   const body=rows.map(a=>`${a.data},${a.paciente},${a.proc},${a.sessao||''},${a.valor},${a.pgto||''},${a.origem||''},${(a.obs||'').replace(/,/g,' ')}`).join('\n');
-  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(header+body); a.download=`atendimentos-${mesKey()}.csv`; a.click();
+  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(header+body); a.download=`atendimentos-${selectedMonthKey}.csv`; a.click();
 }
 
 function showTab(name,btn) {
@@ -702,7 +725,35 @@ function showTab(name,btn) {
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
-  const lbl=mesAtual();
+  const selector=document.getElementById('month-selector');
+
+  // inicializa mês selecionado como "agora"
+  const initialKey = mesKey();
+  selectedMonthKey = initialKey;
+
+  if (selector) {
+    selector.value = initialKey;
+    selector.addEventListener('change', (e) => {
+      selectedMonthKey = mesKeyFromInput(e.target.value);
+      // atualiza labels do header
+      const lbl = mesLabelFromKey(selectedMonthKey);
+      document.getElementById('mes-label').textContent = lbl;
+      document.getElementById('mes-badge').textContent = '🗓️ ' + lbl.charAt(0).toUpperCase() + lbl.slice(1);
+
+      // recarrega listeners para o novo mês
+      subscribeAll();
+
+      // ajusta campos de data para o primeiro dia do mês (mantém comportamento previsível)
+      const [yy,mm] = selectedMonthKey.split('-');
+      const firstDay = `${yy}-${mm}-01`;
+      ['at-data','co-data','pr-data','de-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=firstDay;});
+
+      // mostra fechamento atual (vai atualizar também via listeners)
+      renderFechamento();
+    });
+  }
+
+  const lbl=mesLabelFromKey(selectedMonthKey);
   document.getElementById('mes-label').textContent=lbl;
   document.getElementById('mes-badge').textContent='🗓️ '+lbl.charAt(0).toUpperCase()+lbl.slice(1);
   const t=today();
