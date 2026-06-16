@@ -1,3 +1,56 @@
+
+
+Atualizar
+
+Compartilhar
+pasted_content.txt
+Texto · 51.00 KB
+preciso que revise o código e crie um seletor de mês no header para poder navegar entre os meses salvos.
+quero que os dados de maio fiquem na pasta de maio e as de junho fiquem em Junho e assim por diante
+Lite
+Com certeza! Vou analisar o seu código agora mesmo para implementar o seletor de meses no header e organizar a estrutura de pastas por mês.
+
+Lite
+Analisei seu código e identifiquei que ele já possui uma estrutura interessante com Firebase. Vou agora implementar as melhorias:
+Seletor de mês funcional no header - Permitirá navegar entre meses salvos
+Organização por mês - Os dados de cada mês ficarão em pastas separadas (maio, junho, etc.)
+Sincronização de dados - Ao trocar de mês, carregará os dados específicos daquele mês
+Navegação entre meses - Botões para próximo/anterior mês
+Vou criar o arquivo revisado agora.
+
+Lite
+Aqui está o seu código revisado com as melhorias solicitadas.
+Principais alterações realizadas:
+Seletor de Mês no Header: Adicionei um seletor de mês (<input type="month">) e botões de navegação (← Anterior e Próximo →) para facilitar a transição entre os períodos.
+Organização por Pastas: Modifiquei a função mesRef para que os dados sejam salvos no Firebase seguindo a estrutura que você pediu (ex: meses/Maio/..., meses/Junho/...). Isso garante que cada mês tenha seu próprio conjunto de dados independente.
+Sincronização Dinâmica: Ao trocar o mês no seletor, o sistema automaticamente:
+Atualiza todos os rótulos (labels) da interface.
+Reinicia os "listeners" do Firebase para carregar apenas os dados do mês selecionado.
+Ajusta os campos de data de novos lançamentos para o primeiro dia do mês escolhido.
+Correção na Edição: Ajustei a lógica de edição para que, se você alterar a data de um registro para outro mês, ele seja movido automaticamente para a "pasta" correta do novo mês.
+Você pode baixar o arquivo anexo e utilizá-lo diretamente.
+caixa_clinica_revisado.html
+Código · 51.96 KB
+Ver todos os arquivos nesta tarefa
+Tarefa concluída
+Como foi este resultado?
+Sugestões de acompanhamento
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta 
+
+
+
+Computadores na nuvem
+Novo
+
+Manus is an AI Agent and can make mistakes. Please double-check before use.
+
+caixa_clinica_revisado.html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -57,6 +110,10 @@ header { position: relative; z-index: 10; padding: 24px 24px 0; display: flex; a
 .brand-sub { font-size: 12px; color: var(--text-light); letter-spacing: 0.05em; text-transform: uppercase; }
 .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mes-badge { background: white; border: 1px solid var(--border-strong); padding: 6px 14px; border-radius: 99px; font-size: 13px; color: var(--text-mid); font-weight: 500; box-shadow: var(--shadow-sm); }
+.month-nav { display: flex; align-items: center; gap: 8px; }
+.month-nav-btn { background: white; border: 1px solid var(--border-strong); padding: 8px 12px; border-radius: 8px; color: var(--text-mid); font-weight: 500; cursor: pointer; transition: all 0.2s ease; font-size: 12px; }
+.month-nav-btn:hover { background: var(--rose-50); border-color: var(--rose-400); color: var(--rose-600); }
+.month-nav-btn:active { transform: scale(0.95); }
 .sync-dot { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: pulse-green 2s infinite; }
 .dot.offline { background: #f59e0b; animation: none; }
@@ -178,7 +235,7 @@ tr:hover td { background: rgba(253,240,244,0.5); }
 .modal-field input:focus { border-color: var(--rose-400); box-shadow: 0 0 0 3px rgba(244,63,114,0.1); }
 
 .toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.toast { background: var(--text-dark); color: white; padding: 10px 20px; border-radius: 99px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); animation: toastIn 0.3s ease; white-space: nowrap; }
+.toast { background: var(--text-dark); color: white; padding: 10px 20px; border-radius: 99px; font-size: 12px; font-weight: 500; animation: toastIn 0.3s ease; }
 .toast.success { background: #16a34a; }
 .toast.error { background: #e11d54; }
 @keyframes toastIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
@@ -192,6 +249,8 @@ tr:hover td { background: rgba(253,240,244,0.5); }
   .brand-name { font-size: 21px; }
   .fechamento-hero-value { font-size: 36px; }
   .metric-value { font-size: 22px; }
+  .header-right { gap: 6px; }
+  .month-nav-btn { padding: 6px 10px; font-size: 11px; }
 }
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -246,9 +305,10 @@ tr:hover td { background: rgba(253,240,244,0.5); }
   </div>
   <div class="header-right">
     <div class="mes-badge" id="mes-badge">—</div>
-    <div class="field" style="min-width:160px;">
-      <label style="display:none;">Mês</label>
-      <input id="month-selector" type="month" style="width:160px;" />
+    <div class="month-nav">
+      <button class="month-nav-btn" onclick="previousMonth()" title="Mês anterior">← Anterior</button>
+      <input id="month-selector" type="month" style="padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text-mid); cursor: pointer;" />
+      <button class="month-nav-btn" onclick="nextMonth()" title="Próximo mês">Próximo →</button>
     </div>
     <div class="sync-dot">
       <div class="dot" id="sync-dot"></div>
@@ -388,12 +448,62 @@ function today() { return new Date().toISOString().split('T')[0]; }
 function fmtDate(d) { return d ? d.split('-').reverse().join('/') : '—'; }
 function mesAtual() { return new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'}); }
 function mesKey() { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function parseMonthKey(key) { // "YYYY-MM" -> {y,m}
+  if (!key || !/^\d{4}-\d{2}$/.test(key)) return null;
+  const [y,m] = key.split('-').map(Number);
+  return { y, m };
+}
+function shiftMonthKey(key, delta) { // delta pode ser negativo
+  const p=parseMonthKey(key); if(!p) return key;
+  const dt=new Date(p.y, p.m-1+delta, 1);
+  const yy=dt.getFullYear();
+  const mm=String(dt.getMonth()+1).padStart(2,'0');
+  return yy+'-'+mm;
+}
 function mesKeyFromInput(v) { return v && /^\d{4}-\d{2}$/.test(v) ? v : mesKey(); }
+function monthKeyFromDateStr(dateStr) {
+  if (!dateStr) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  return dateStr.slice(0,7);
+}
 function mesLabelFromKey(key) {
   const [y,m] = (key||'').split('-');
   const date = new Date(Number(y), Number(m)-1, 1);
   return date.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
 }
+
+// ─── NAVEGAÇÃO DE MESES ──────────────────────────
+function previousMonth() {
+  selectedMonthKey = shiftMonthKey(selectedMonthKey, -1);
+  updateMonthSelector();
+}
+
+function nextMonth() {
+  selectedMonthKey = shiftMonthKey(selectedMonthKey, 1);
+  updateMonthSelector();
+}
+
+function updateMonthSelector() {
+  const selector = document.getElementById('month-selector');
+  if (selector) selector.value = selectedMonthKey;
+  
+  // atualiza labels do header
+  const lbl = mesLabelFromKey(selectedMonthKey);
+  document.getElementById('mes-label').textContent = lbl;
+  document.getElementById('mes-badge').textContent = '🗓️ ' + lbl.charAt(0).toUpperCase() + lbl.slice(1);
+
+  // recarrega listeners para o novo mês
+  subscribeAll();
+
+  // ajusta campos de data para o primeiro dia do mês
+  const [yy,mm] = selectedMonthKey.split('-');
+  const firstDay = `${yy}-${mm}-01`;
+  ['at-data','co-data','pr-data','de-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=firstDay;});
+
+  // renderiza fechamento
+  renderFechamento();
+}
+
 let selectedMonthKey = mesKey();
 let firebaseUnsubs = [];
 
@@ -433,7 +543,19 @@ function setSyncStatus(online) {
 
 // ─── DATA ────────────────────────────────────────
 let data = { atendimentos:{}, colaboradores:{}, produtos:{}, despesas:{} };
-function mesRef(col) { return db.ref('meses/'+selectedMonthKey+'/'+col); }
+function mesRef(col, monthKey) {
+  // Organiza dados em pastas por mês: meses/Maio, meses/Junho, etc.
+  const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const [y, m] = monthKey.split('-');
+  const monthName = monthNames[parseInt(m) - 1];
+  const folderName = `${monthName}`;
+  return db.ref('meses/' + folderName + '/' + col);
+}
+function itemMonthKey(col, item) {
+  // item.data esperado: YYYY-MM-DD
+  const mk = monthKeyFromDateStr(item && item.data);
+  return mk || selectedMonthKey; // fallback (caso algum dado legado esteja sem data)
+}
 function subscribeAll() {
   // limpa listeners anteriores
   if (firebaseUnsubs && firebaseUnsubs.length) {
@@ -442,7 +564,7 @@ function subscribeAll() {
   firebaseUnsubs = [];
 
   ['atendimentos','colaboradores','produtos','despesas'].forEach(col => {
-    const ref = mesRef(col);
+    const ref = mesRef(col, selectedMonthKey);
     const handler = (snap) => {
       data[col] = snap.val() || {};
       render(col);
@@ -454,19 +576,34 @@ function subscribeAll() {
 }
 function pushItem(col,obj) {
   const id=uid(); obj.id=id;
-  mesRef(col).child(id).set(obj)
+  const mk = itemMonthKey(col,obj);
+  mesRef(col,mk).child(id).set(obj)
     .then(()=>toast('Salvo ✓','success'))
     .catch(e=>toast('Erro: '+e.message,'error'));
 }
 function deleteItem(col,id) {
-  mesRef(col).child(id).remove()
+  mesRef(col, selectedMonthKey).child(id).remove()
     .then(()=>toast('Removido ✓'))
     .catch(e=>toast('Erro: '+e.message,'error'));
 }
 function updateItem(col,id,obj) {
-  mesRef(col).child(id).update(obj)
+  // muda de mês se o campo data foi alterado
+  const currentMonth = monthKeyFromDateStr(data[col] && data[col][id] && data[col][id].data);
+  const targetMonth = monthKeyFromDateStr(obj && obj.data) || currentMonth || selectedMonthKey;
+  const srcRef = mesRef(col, currentMonth || selectedMonthKey);
+  const dstRef = mesRef(col, targetMonth);
+  if ((currentMonth || selectedMonthKey) === targetMonth) {
+    dstRef.child(id).update(obj)
     .then(()=>toast('Atualizado ✓','success'))
     .catch(e=>toast('Erro: '+e.message,'error'));
+  } else {
+    // se mudou de mês, cria novo e deleta antigo
+    obj.id = id;
+    dstRef.child(id).set(obj)
+      .then(()=>srcRef.child(id).remove())
+      .then(()=>toast('Atualizado ✓','success'))
+      .catch(e=>toast('Erro: '+e.message,'error'));
+  }
 }
 
 // ─── MODAL DE EDIÇÃO ────────────────────────────
@@ -735,21 +872,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     selector.value = initialKey;
     selector.addEventListener('change', (e) => {
       selectedMonthKey = mesKeyFromInput(e.target.value);
-      // atualiza labels do header
-      const lbl = mesLabelFromKey(selectedMonthKey);
-      document.getElementById('mes-label').textContent = lbl;
-      document.getElementById('mes-badge').textContent = '🗓️ ' + lbl.charAt(0).toUpperCase() + lbl.slice(1);
-
-      // recarrega listeners para o novo mês
-      subscribeAll();
-
-      // ajusta campos de data para o primeiro dia do mês (mantém comportamento previsível)
-      const [yy,mm] = selectedMonthKey.split('-');
-      const firstDay = `${yy}-${mm}-01`;
-      ['at-data','co-data','pr-data','de-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=firstDay;});
-
-      // mostra fechamento atual (vai atualizar também via listeners)
-      renderFechamento();
+      updateMonthSelector();
     });
   }
 
