@@ -38,7 +38,7 @@
 A captura abaixo mostra a aplicação publicada com os módulos de **Atendimentos**, **Colaboradores**, **Produtos**, **Despesas** e **Fechamento**, além do formulário para novo atendimento. A tabela de dados foi omitida da captura entregue para não expor nomes de pacientes.
 
 <p align="center">
-  <img src="assets/screenshots/caixa-clinica-interface.webp" alt="Interface de lançamento de atendimento do Caixa Clínica" width="920" />
+  <img src="caixa-clinica-interface.webp" />
 </p>
 
 <p align="center"><sub>Captura real da interface publicada, com o formulário operacional preservado e dados pessoais removidos do enquadramento.</sub></p>
